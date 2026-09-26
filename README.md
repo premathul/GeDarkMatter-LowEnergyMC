@@ -1,207 +1,116 @@
 # GeDarkMatter-LowEnergyMC
 
-GeDarkMatter-LowEnergyMC is a lightweight Monte Carlo and statistical-analysis framework for studying **low-energy recoil signals in germanium dark-matter detectors**.
+GeDarkMatter-LowEnergyMC is a research-oriented Monte Carlo and statistical-analysis framework for studying low-energy signals in germanium dark-matter detectors. The project is designed to separate the underlying particle-physics recoil model from detector response and statistical interpretation. This modular approach is useful because uncertainties in the predicted signal, the detector resolution, the trigger threshold, the selection efficiency, and the background model arise from physically different sources and should not be hidden inside one monolithic simulation.
 
-The project is designed around a modular pipeline:
+Germanium detectors are especially important in low-background physics because they can combine low energy thresholds with excellent energy resolution and mature detector technology. For light dark matter, low-mass weakly interacting particles, or other exotic energy-deposition mechanisms, the most informative events can appear close to threshold. In that regime, detector effects that would be secondary at high energy can become central to the interpretation. A modest change in resolution or trigger efficiency can noticeably modify the predicted observed spectrum. The purpose of this repository is to provide a transparent framework in which those effects can be studied, validated, and eventually combined with more sophisticated dark-matter interaction models.
 
-[
-	ext{particle model}
-ightarrow
-rac{dR}{dE}
-ightarrow
-	ext{true recoil spectrum}
-ightarrow
-	ext{detector response}
-ightarrow
-	ext{selection efficiency}
-ightarrow
-	ext{observed spectrum}
-ightarrow
-	ext{statistical inference}.
-]
+The current implementation includes a simple toy recoil generator, elastic two-body scattering kinematics, detector smearing, hard thresholding, logistic efficiency, matrix-based detector response, binned counting, Poisson likelihood calculations, Asimov significance, and rate-to-count conversion. These pieces form the basic analysis chain needed to transform an idealized recoil spectrum into a detector-level prediction.
 
-The present repository does not attempt to replace Geant4 or a complete dark-matter phenomenology package. Instead, it focuses on a transparent low-energy layer that can accept validated physical recoil spectra and propagate them through detector response and analysis.
-
----
-
-## 1. Scientific motivation
-
-Germanium detectors are widely used in rare-event physics because of their:
-
-- excellent energy resolution,
-- low electronic noise,
-- mature crystal technology,
-- low thresholds,
-- sensitivity to nuclear and electronic recoils,
-- long history in low-background experiments.
-
-For light or weakly interacting dark matter, the most interesting events may appear near detector threshold.
-
-At those energies, seemingly small assumptions about resolution, threshold, efficiency, and binning can significantly affect the predicted observed spectrum.
-
-This repository isolates those effects so that they can be tested independently.
-
----
-
-## 2. Current capabilities
-
-The package currently provides:
-
-- toy exponential recoil-spectrum sampling,
-- elastic two-body recoil kinematics,
-- reduced-mass calculation,
-- maximum nuclear recoil energy,
-- minimum incident speed,
-- Gaussian detector smearing,
-- threshold selection,
-- logistic efficiency curves,
-- detector response matrices,
-- response application to expected spectra,
-- binned histograms,
-- Poisson log-likelihood,
-- Asimov discovery significance,
-- exposure and rate conversion.
-
----
-
-## 3. Elastic recoil kinematics
-
-For dark-matter mass (m_chi) and target-nucleus mass (m_N), the reduced mass is
+For a dark-matter particle of mass (m_chi) scattering elastically from a nucleus of mass (m_N), the reduced mass is
 
 [
-mu_{chi N}
-=
+mu_{chi N}=
 rac{m_chi m_N}{m_chi+m_N}.
 ]
 
-For incident speed (v), the maximum elastic nuclear recoil energy is
+For an incident speed (v), the maximum recoil energy in an elastic collision is
 
 [
-E_{R,max}
-=
+E_{R,max}=
 rac{2mu_{chi N}^2v^2}{m_N}.
 ]
 
-The minimum incident speed required to produce recoil (E_R) is
+Conversely, the minimum incident speed required to produce a recoil energy (E_R) is
 
 [
-v_{min}
-=
+v_{min}=
 sqrt{
 rac{m_NE_R}
 {2mu_{chi N}^2}
 }.
 ]
 
-The code implements these relations with explicit SI/GeV/eV conversion.
+These relations are implemented explicitly so that the user can examine the kinematic scale of a proposed interaction before introducing a full astrophysical velocity distribution.
 
----
-
-## 4. Toy recoil generation
-
-The initial Monte Carlo includes a simple exponential spectrum
+The current Monte Carlo includes a toy exponential recoil distribution,
 
 [
-rac{dR}{dE}
-propto
-e^{-E/E_0}.
+rac{dR}{dE}propto e^{-E/E_0}.
 ]
 
-This is **not** presented as a complete dark-matter recoil model.
+This model is not intended to represent a complete dark-matter prediction. Its role is to provide a controlled input spectrum that makes it possible to validate the downstream detector and statistical machinery. A physically calibrated differential rate can later replace the toy spectrum without changing the detector-response layer.
 
-It exists to test the detector and statistical pipeline with a controlled input distribution.
-
-A validated physical rate model can later replace it without changing the downstream response code.
-
----
-
-## 5. Detector energy resolution
-
-Measured energy is modeled with Gaussian smearing,
+Detector energy resolution is modeled initially by Gaussian smearing,
 
 [
-E_{m meas}
+E_{mathrm{meas}}
 sim
-mathcal N(E_{m true},sigma_E).
+mathcal N(E_{mathrm{true}},sigma_E).
 ]
 
-The repository supports both event-by-event Monte Carlo smearing and matrix-based spectral response.
-
-For discrete energy grids,
+The package supports both event-level smearing and response-matrix calculations. In a binned analysis, the detector response can be represented as
 
 [
-N_i^{m meas}
+N_i^{mathrm{meas}}
 =
 sum_j
-R_{ij}
-N_j^{m true},
+R_{ij}N_j^{mathrm{true}},
 ]
 
-where (R_{ij}) is the detector response matrix.
+where (R_{ij}) gives the probability that an event originating in true-energy bin (j) is reconstructed in measured-energy bin (i). The current response implementation is normalized so that total counts are conserved before efficiency losses are applied.
 
----
-
-## 6. Detection efficiency
-
-A logistic efficiency model is included:
+A logistic efficiency model is included as a generic smooth threshold,
 
 [
-epsilon(E)
+epsilon(E)=
+rac{1}{
+1+exp[-(E-E_{50})/w]
+}.
+]
+
+Here (E_{50}) is the energy at which efficiency reaches 50%, and (w) controls the turn-on width. This is useful for testing analysis logic, but a real experimental analysis should use a measured efficiency curve obtained from calibration or detector characterization. The repository also supports a hard threshold for cases where a simple cut is intentionally being studied. Hard thresholds and smooth efficiency curves represent different assumptions and should not be used interchangeably without explanation.
+
+The statistical layer begins with a Poisson likelihood. For observed counts (n_i) and expected counts (mu_i), the log likelihood, up to additive constants independent of the model parameters, is
+
+[
+lnmathcal L
 =
-rac{1}
-{1+exp[-(E-E_{50})/w]}.
+sum_i
+left(
+n_ilnmu_i-mu_i
+ight).
 ]
 
-Here:
-
-- (E_{50}) is the 50% efficiency point,
-- (w) controls the turn-on width.
-
-This is a convenient generic approximation.
-
-Real analyses should use measured detector efficiencies.
-
----
-
-## 7. Thresholding
-
-A hard threshold can also be applied directly,
+The repository also implements the Asimov significance for a known background model,
 
 [
-E_{m meas}ge E_{m th}.
+Z_A=
+sqrt{
+2sum_i
+left[
+(s_i+b_i)
+lnleft(1+rac{s_i}{b_i}ight)
+-s_i
+ight]
+}.
 ]
 
-Hard thresholds and smooth efficiency curves represent different detector assumptions and should not be confused.
+This quantity is useful for estimating expected sensitivity under idealized conditions, but it is not a replacement for a complete experimental limit-setting procedure with nuisance parameters, systematic uncertainties, and coverage studies.
 
----
+The package includes explicit conversion from differential rate to expected counts. If the rate is expressed in events per kilogram per day per electronvolt, the expected number of events in a bin of width (Delta E) for exposure (mathcal E) is
 
-## 8. Repository structure
+[
+N=
+rac{dR}{dE}
+mathcal E
+Delta E.
+]
 
-```text
-GeDarkMatter-LowEnergyMC/
-├── README.md
-├── pyproject.toml
-├── examples/
-│   ├── toy_recoil_mc.py
-│   └── kinematics_demo.py
-├── src/
-│   └── gedm_mc/
-│       ├── __init__.py
-│       ├── core.py
-│       ├── kinematics.py
-│       ├── response.py
-│       └── statistics.py
-├── tests/
-│   ├── test_core.py
-│   └── test_physics.py
-└── .github/
-    └── workflows/
-        └── tests.yml
-```
+Making this conversion explicit is important because unit mistakes in exposure or energy binning can easily produce large normalization errors.
 
----
+The repository is organized into several small modules. The `core.py` module contains the initial Monte Carlo recoil sampling, smearing, threshold, and efficiency utilities. The `kinematics.py` module implements elastic scattering kinematics. The `response.py` module builds and applies detector-response matrices. The `statistics.py` module contains Poisson and Asimov calculations. Example scripts demonstrate toy Monte Carlo generation and recoil kinematics, while the automated tests verify reproducibility, kinematic inversion, response normalization, and statistical behavior.
 
-## 9. Installation
+Installation can be performed with
 
 ```bash
 git clone https://github.com/premathul/GeDarkMatter-LowEnergyMC.git
@@ -209,16 +118,14 @@ cd GeDarkMatter-LowEnergyMC
 python -m pip install -e .
 ```
 
-Development installation:
+For development and testing,
 
 ```bash
 python -m pip install -e .[dev]
 pytest -q
 ```
 
----
-
-## 10. Example: toy Monte Carlo
+A basic toy Monte Carlo can be run with
 
 ```python
 from gedm_mc.core import (
@@ -245,257 +152,44 @@ accepted = apply_threshold(
 )
 ```
 
-Using explicit random seeds makes this example reproducible.
+Explicit random seeds are used here so that the result can be reproduced exactly.
 
----
+The current code should be regarded as a low-energy analysis foundation rather than a complete dark-matter event generator. It does not yet include the Standard Halo Model, Earth-frame velocity distributions, nuclear form factors, isotope-dependent scattering, spin-independent cross-section normalization, spin-dependent interactions, dark-photon absorption, crystal electronic structure, Migdal processes, quenching, phonon transport, cosmogenic activation, or detailed radioactive backgrounds.
 
-## 11. Example: recoil kinematics
+The next physics milestone is to implement a standard spin-independent nuclear recoil model for germanium. That requires combining the halo velocity distribution, nuclear reduced mass, cross-section normalization, isotope composition, and a nuclear form factor such as the Helm form factor. Once that calculation is validated against independent references, the toy exponential spectrum can remain as a testing utility while the physical recoil model becomes the primary signal generator.
 
-```python
-from gedm_mc.kinematics import max_recoil_energy_ev
+A second development stage will focus on detector physics near threshold. For germanium detectors, this may include ionization yield, electron-equivalent versus nuclear-recoil-equivalent energy, Fano fluctuations, energy-dependent resolution, charge-production statistics, trigger efficiency, and multiple measured channels. The architecture is intentionally designed so that these response effects remain separate from the underlying particle model.
 
-Emax = max_recoil_energy_ev(
-    m_chi_gev=10.0,
-    m_nucleus_gev=67.7,
-    speed_m_s=220e3,
-)
+A third development stage will add backgrounds and statistical inference. Real rare-event analyses depend critically on the background model, and therefore future versions should support flat continua, lines, cosmogenic components, neutron templates, and nuisance parameters. Profile likelihoods, upper limits, expected sensitivity bands, toy-Monte-Carlo coverage tests, and systematic uncertainty propagation are natural future additions.
 
-print(Emax)
-```
-
-This illustrates the kinematic scale for an elastic dark-matter–germanium collision.
-
----
-
-## 12. Statistical layer
-
-### Poisson likelihood
-
-For observed bin count (n_i) and expectation (mu_i),
+The long-term workflow is
 
 [
-lnmathcal L
-=
-sum_i
-left(
-n_ilnmu_i-mu_i
-ight)
-+
-	ext{constant}.
-]
-
-The factorial term is omitted when only likelihood differences are needed.
-
-### Asimov significance
-
-For known background (b_i) and signal (s_i),
-
-[
-Z_A
-=
-sqrt{
-2sum_i
-left[
-(s_i+b_i)
-lnleft(1+rac{s_i}{b_i}ight)
--s_i
-ight]
-}.
-]
-
-This is an approximate expected-significance metric, not a substitute for a complete experimental limit-setting framework.
-
----
-
-## 13. Rate to counts
-
-For differential rate
-
-[
+	ext{interaction model}
+ightarrow
 rac{dR}{dE}
+ightarrow
+	ext{true spectrum}
+ightarrow
+R(E_{mathrm{meas}},E_{mathrm{true}})
+ightarrow
+epsilon(E)
+ightarrow
+	ext{background model}
+ightarrow
+mathcal L
+ightarrow
+	ext{sensitivity or inference}.
 ]
 
-in events/(kg day eV), exposure (mathcal E) in kg day, and bin width (Delta E),
+The key design principle is that each stage should remain replaceable and testable. A detector physicist should be able to modify the response model without rewriting the dark-matter kinematics, while a phenomenologist should be able to replace the signal model without modifying the detector analysis.
 
-[
-N
-=
-rac{dR}{dE}
-mathcal E
-Delta E.
-]
+Reproducibility is especially important in low-count experiments. A quantitative result should record the dark-matter mass, interaction model, nuclear assumptions, velocity model, recoil normalization, detector resolution, threshold, efficiency, exposure, energy binning, random seed, statistical method, and Git commit. Small differences in any of these inputs can produce meaningful changes near threshold.
 
-The code provides a helper for this conversion.
+The repository is currently appropriate for method development, detector-response studies, educational Monte Carlo work, and prototyping of low-energy analyses. It should not be used to claim an experimental exclusion limit or discovery sensitivity without independently validating the physical recoil model, detector calibration, background model, and statistical procedure.
 
----
+## Contact
 
-## 14. Validation
+**Athul Prem**
 
-Current tests verify:
-
-- reproducible Monte Carlo draws for fixed seeds,
-- threshold selection,
-- logistic efficiency midpoint,
-- recoil kinematics inversion,
-- detector-response normalization,
-- conservation of total counts under normalized smearing,
-- positivity of Asimov significance.
-
----
-
-## 15. Scientific limitations
-
-The current repository does not yet include:
-
-- Standard Halo Model velocity integration,
-- nuclear form factors,
-- spin-independent cross-section normalization,
-- spin-dependent interactions,
-- dark-photon absorption,
-- electron recoil production,
-- crystal form factors,
-- Migdal effect,
-- quenching models,
-- ionization yield,
-- phonon transport,
-- Geant4 detector geometry,
-- cosmogenic activation,
-- radioactive background simulation,
-- nuisance-parameter profiling,
-- confidence-limit construction.
-
-These are future modules.
-
----
-
-## 16. Planned development
-
-### Phase I — recoil physics
-
-- Standard Halo Model,
-- Maxwellian velocity distribution,
-- Earth-frame velocity,
-- spin-independent nuclear recoil rate,
-- Helm form factor,
-- isotope mixture for natural Ge.
-
-### Phase II — low-energy detector physics
-
-- nuclear recoil ionization yield,
-- electron-equivalent energy,
-- threshold models,
-- Fano fluctuations,
-- energy-dependent resolution,
-- multiple response channels.
-
-### Phase III — background models
-
-- flat continuum,
-- exponential backgrounds,
-- x-ray lines,
-- cosmogenic isotopes,
-- neutron recoil templates,
-- nuisance parameters.
-
-### Phase IV — inference
-
-- profile likelihood,
-- Asimov sensitivity,
-- upper limits,
-- toy-MC coverage,
-- Bayesian posterior option,
-- systematic uncertainty propagation.
-
-### Phase V — experiment interface
-
-- external recoil-spectrum import,
-- calibration tables,
-- detector efficiency files,
-- measured background spectra,
-- configuration-driven analysis.
-
----
-
-## 17. Separation of signal and detector response
-
-A major design principle is to keep
-
-[
-	ext{physics generation}
-]
-
-separate from
-
-[
-	ext{detector response}.
-]
-
-This allows the same detector model to be tested against different candidate signals.
-
-Likewise, a single theoretical signal can be propagated through different detector assumptions.
-
----
-
-## 18. Reproducibility checklist
-
-A quantitative result should state:
-
-- dark-matter mass,
-- interaction model,
-- target isotope assumptions,
-- recoil-spectrum normalization,
-- velocity model,
-- energy resolution,
-- threshold,
-- efficiency,
-- exposure,
-- binning,
-- random seed,
-- statistical method,
-- code commit.
-
----
-
-## 19. Appropriate use
-
-This software is suitable for:
-
-- toy studies,
-- method development,
-- educational calculations,
-- detector-response validation,
-- sensitivity prototyping,
-- cross-checking analysis logic.
-
-It should not be used for publication-level exclusion limits without independently validating the physical rate model, detector calibration, and statistical treatment.
-
----
-
-## 20. Contributing
-
-Contributions are welcome in:
-
-- recoil models,
-- Ge detector physics,
-- efficiency models,
-- response matrices,
-- backgrounds,
-- statistical methods,
-- numerical tests,
-- documentation.
-
-Physics contributions should include references and analytical or numerical benchmarks whenever possible.
-
----
-
-## 21. License
-
-MIT License.
-
----
-
-## 22. Project status
-
-**Status:** active development.
-
-The present repository provides a transparent low-energy Monte Carlo and response-analysis foundation. The long-term objective is a modular Ge detector framework connecting dark-matter recoil physics to experimentally observable spectra and statistically reproducible sensitivity calculations.
+For questions, scientific discussion, collaboration, or suggestions related to this project, please contact Athul Prem through the GitHub account associated with the repository.
